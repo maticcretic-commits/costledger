@@ -1,26 +1,54 @@
 # CostLedger 🧾
 
-**Know what every agent run costs — before the invoice does.**
+**AI agents burn tokens quietly — a runaway loop, a prompt that grew by 2,000 tokens, a model swap nobody priced — and none of it shows up until the provider invoice lands at the end of the month.**
 
-AI agents burn tokens quietly. A runaway loop, a prompt that grew by
-2,000 tokens, a model swap nobody priced — none of it shows up until
-the provider invoice lands at the end of the month. CostLedger reads
-the run logs you already have, tallies token usage per run, per model
-and per tool against a local pricing table, gates budgets in CI, and
-diffs cost against a saved baseline.
+CostLedger reads the run logs you already have and tallies token usage and cost per run, per model and per tool against a local pricing table. Money math is Decimal-exact, and an unknown model is reported as UNKNOWN — never silently costed at $0.
 
-It is the cost counterpart to AgentCI's behavior regression: AgentCI
-asks "did the change break it?", CostLedger asks "did the change make
-it expensive?"
-
-Offline and dependency-free: logs are parsed locally, money math is
-Decimal-exact (never float), and an unknown model is reported as
-**UNKNOWN** — never silently costed at $0.
+*Part of **AgentForge** — verify AI-agent work before you ship it.*
+*The family: [AgentProof](https://github.com/maticcretic-commits/agentproof) · [PromptRE](https://github.com/maticcretic-commits/promptre) · [AgentCI](https://github.com/maticcretic-commits/agentci) · [SecretScan](https://github.com/maticcretic-commits/secretscan) · [CostLedger](https://github.com/maticcretic-commits/costledger) · [SchemaGuard](https://github.com/maticcretic-commits/schemaguard) · [SkillAudit](https://github.com/maticcretic-commits/skillaudit) · [PromptDiff](https://github.com/maticcretic-commits/promptdiff) · [TraceTape](https://github.com/maticcretic-commits/tracetape) · [PromptLint](https://github.com/maticcretic-commits/promptlint) · [ClaimCheck](https://github.com/maticcretic-commits/claimcheck) · [TrustBadge](https://github.com/maticcretic-commits/trustbadge)*
 
 ```bash
-python src/costledger.py tally runs/ --save ledger.json
-python src/costledger.py budget runs/ --max 5.00
-python src/costledger.py compare ledger.v1.json ledger.v2.json
+$ costledger tally examples/sample-run.jsonl --pricing examples/pricing.yaml
+```
+
+```
+====================================================================
+CostLedger — tally report
+====================================================================
+Sources: examples/sample-run.jsonl
+Pricing: examples/pricing.yaml (as of 2026-10-20, USD)
+
+Per run:
+  run-alpha                         4,000 in /      1,400 out   $0.0270
+  run-beta                          2,140 in /        128 out   UNKNOWN (known part only; total ≥ $0.0019)
+
+Per model:
+  claude-sonnet-4.5                 2,000 in /        900 out   $0.0195
+  gpt-5                             3,500 in /        500 out   $0.0094
+  mystery-model-9000                  640 in /        128 out   UNKNOWN
+⚠️  UNKNOWN MODEL(S): mystery-model-9000 — tokens tallied above, cost UNKNOWN (not $0). Add prices for them to price these runs.
+Total cost: UNKNOWN — known part is $0.0289; the true total is higher.
+```
+
+*Exit code 0 — tallied. Gate the same log with `costledger budget … --max 0.01` and it fails: “❌ OVER BUDGET — total cost $0.0289 exceeds budget $0.0100” (exit 1).*
+
+## Install
+
+```bash
+pipx install git+https://github.com/maticcretic-commits/costledger
+# or, into the current environment:
+pip install git+https://github.com/maticcretic-commits/costledger
+```
+
+Then run it as `costledger …` (Python 3.9+, no dependencies — stdlib only).
+PyPI release planned; until then, the git URL above is the install path.
+
+From source — it is a single file, so no install is needed at all:
+
+```bash
+git clone https://github.com/maticcretic-commits/costledger
+cd costledger
+python src/costledger.py …
 ```
 
 ## The commands
@@ -172,10 +200,38 @@ build artifact — tallied from logs, gated in CI, and diffed on every
 change — so the surprise happens in a pull request, where it's cheap,
 instead of in billing, where it isn't.
 
+## Limitations
+
+- CostLedger prices what your logs record: a run that never logged usage
+  is invisible to it.
+- Prices are only as current as your pricing file — every report prints
+  the file's `as_of` date, and a pricing file without one earns a visible
+  stale-price warning.
+- Token counts come from the logs' own fields; a producer that logs wrong
+  counts produces wrong totals (the money math itself is Decimal-exact).
+
+## Exit codes & JSON output
+
+All AgentForge tools share one contract (full text in
+[CONVENTIONS.md](CONVENTIONS.md)):
+
+| Code | Meaning |
+|------|---------|
+| `0` | Clean / PASS — no findings at or above the tool's fail threshold |
+| `1` | Findings / FAIL — the tool ran fine; the answer is “no” |
+| `2` | Caller error — bad arguments, missing or unreadable input |
+| `3` | Environment error — the tool itself could not run |
+
+On a caller error the tool also prints one JSON line to stderr:
+`{"error": {"code": "file_not_found", "message": "no such file: x"}}`.
+
+JSON output (`--format json`) always carries the family envelope —
+`{"tool": "costledger", "version": "1.0.0", "schema_version": 1}` — alongside
+the tool's own payload keys, unchanged.
+
 ## Part of AgentForge
 
-CostLedger is the fifth tool in the [AgentForge](https://github.com/maticcretic-commits)
-trust layer for AI agents:
+CostLedger is one of the 12 tools in the [AgentForge](https://github.com/maticcretic-commits) family — offline, stdlib-only tools to **verify AI-agent work before you ship it**:
 
 - **AgentProof** — verify agent work — [github.com/maticcretic-commits/agentproof](https://github.com/maticcretic-commits/agentproof)
 - **PromptRE** — reverse-engineer agent prompts — [github.com/maticcretic-commits/promptre](https://github.com/maticcretic-commits/promptre)
