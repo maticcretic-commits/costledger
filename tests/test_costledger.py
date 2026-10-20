@@ -515,3 +515,21 @@ def test_cli_init_scaffolds(tmp_path):
                 "--pricing", str(out / "pricing.yaml"))
     assert t.returncode == 0
     assert "UNKNOWN" in t.stdout
+
+
+# ---------------------------------------------------------------------------
+# Phase 2: stdin log stream (pipe composability)
+# ---------------------------------------------------------------------------
+
+def test_tally_stdin():
+    cli = Path(__file__).parent.parent / "src" / "costledger.py"
+    ex = Path(__file__).parent.parent / "examples"
+    proc = subprocess.run(
+        [sys.executable, str(cli), "tally", "-",
+         "--pricing", str(ex / "pricing.yaml"), "--format", "json"],
+        input=(ex / "sample-run.jsonl").read_text(),
+        capture_output=True, text=True)
+    assert proc.returncode == 0
+    data = json.loads(proc.stdout)  # stdout is pure JSON
+    assert data["tool"] == "costledger"
+    assert data["sources"] == ["<stdin>"]
