@@ -409,6 +409,100 @@ def test_cli_prices_prints_as_of(tmp_path):
     assert "USD" in r.stdout
 
 
+# ---------------------------------------------------------------------------
+# Phase 1: version, JSON envelope, error envelope (CONVENTIONS.md)
+# ---------------------------------------------------------------------------
+
+def stderr_envelope(stderr):
+    """Parse the JSON error-envelope line from stderr (the line after
+    the human-readable `error: ...` line)."""
+    lines = [ln for ln in stderr.splitlines() if ln.strip()]
+    assert lines[0].startswith("error: ")
+    return json.loads(lines[-1])["error"]
+
+
+def test_cli_tally_json_envelope(tmp_path):
+    pricing = str(tmp_path / "pricing.yaml")
+    Path(pricing).write_text(PRICING_YAML, encoding="utf-8")
+    log = write_log(tmp_path, [
+        '{"model": "model-a", "input_tokens": 1000, "output_tokens": 100}'])
+    r = run_cli("tally", log, "--pricing", pricing, "--format", "json")
+    assert r.returncode == 0
+    out = json.loads(r.stdout)
+    assert out["tool"] == "costledger"
+    assert out["version"] == "1.0.0"
+    assert out["schema_version"] == 1
+    assert "totals" in out
+    assert out["totals"]["cost_usd"] == "0.0028"
+    # build_ledger's internal ledger-format version stays untouched:
+    # the semver envelope is applied by the CLI layer, not there.
+    raw = build_ledger(parse('{"model": "model-a", "input_tokens": 1}'),
+                       ["x"], prices(tmp_path))
+    assert raw["version"] == 1
+
+
+def test_cli_tally_save_carries_envelope(tmp_path):
+    pricing = str(tmp_path / "pricing.yaml")
+    Path(pricing).write_text(PRICING_YAML, encoding="utf-8")
+    log = write_log(tmp_path, [
+        '{"model": "model-a", "input_tokens": 1000, "output_tokens": 100}'])
+    save = tmp_path / "ledger.json"
+    r = run_cli("tally", log, "--pricing", pricing, "--save", str(save))
+    assert r.returncode == 0
+    saved = json.loads(save.read_text(encoding="utf-8"))
+    assert saved["tool"] == "costledger"
+    assert saved["version"] == "1.0.0"
+    assert saved["schema_version"] == 1
+    assert "totals" in saved
+
+
+def test_cli_version_flag():
+    r = run_cli("--version")
+    assert r.returncode == 0
+    assert r.stdout.strip() == "costledger 1.0.0"
+
+
+def test_cli_missing_log_error_envelope(tmp_path):
+    r = run_cli("tally", str(tmp_path / "nope.jsonl"))
+    assert r.returncode == 2
+    env = stderr_envelope(r.stderr)
+    assert env["code"] == "file_not_found"
+    assert "path not found" in env["message"]
+
+
+def test_cli_compare_mixed_old_and_new_ledgers(tmp_path):
+    old = tmp_path / "old.json"     # pre-envelope shape: no envelope keys
+    new = tmp_path / "new.json"     # envelope shape written by tally --save
+    old.write_text(json.dumps(ledger_with("100")), encoding="utf-8")
+    new_ledger = ledger_with("105")
+    new_ledger.update({"tool": "costledger", "version": "1.0.0",
+                       "schema_version": 1})
+    new.write_text(json.dumps(new_ledger), encoding="utf-8")
+    r = run_cli("compare", str(old), str(new), "--format", "json")
+    assert r.returncode == 0
+    out = json.loads(r.stdout)
+    assert out["baseline_total_usd"] == "100"
+    assert out["new_total_usd"] == "105"
+    assert out["tool"] == "costledger"
+    assert out["version"] == "1.0.0"
+    assert out["schema_version"] == 1
+    # And the other way around (envelope baseline, old-shape new).
+    r2 = run_cli("compare", str(new), str(old))
+    assert r2.returncode == 0
+
+
+def test_cli_budget_bad_max_error_envelope(tmp_path):
+    pricing = str(tmp_path / "pricing.yaml")
+    Path(pricing).write_text(PRICING_YAML, encoding="utf-8")
+    log = write_log(tmp_path, [
+        '{"model": "model-a", "input_tokens": 1000, "output_tokens": 100}'])
+    r = run_cli("budget", log, "--pricing", pricing, "--max", "abc")
+    assert r.returncode == 2
+    env = stderr_envelope(r.stderr)
+    assert env["code"] == "invalid_number"
+    assert "--max must be a number" in env["message"]
+
+
 def test_cli_init_scaffolds(tmp_path):
     out = tmp_path / "scaffold"
     r = run_cli("init", "--dir", str(out))
