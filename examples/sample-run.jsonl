@@ -1,0 +1,6 @@
+{"run_id": "run-alpha", "model": "gpt-5", "tool": "planner", "input_tokens": 1200, "output_tokens": 300, "timestamp": "2026-10-20T09:15:00Z"}
+{"run_id": "run-alpha", "model": "gpt-5", "tool": "web-search", "prompt_tokens": 800, "completion_tokens": 200, "timestamp": "2026-10-20T09:15:04Z"}
+{"run_id": "run-alpha", "model": "claude-sonnet-4.5", "tool": "coder", "input_tokens": 2000, "output_tokens": 900, "timestamp": "2026-10-20T09:16:41Z"}
+{"run_id": "run-beta", "model": "gpt-5", "tool": "coder", "total_tokens": 1500, "timestamp": "2026-10-20T10:02:10Z"}
+{"run_id": "run-beta", "model": "mystery-model-9000", "tool": "coder", "input_tokens": 640, "output_tokens": 128, "timestamp": "2026-10-20T10:03:55Z"}
+{"run_id": "run-beta", "event": "note", "message": "checkpoint saved — no usage on this line"}
