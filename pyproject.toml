@@ -1,0 +1,17 @@
+[build-system]
+requires = ["setuptools>=61"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "costledger"
+version = "1.0.0"
+description = "Offline cost accounting for AI agent runs. Know what every agent run costs — before the invoice does."
+requires-python = ">=3.9"
+license = {text = "MIT"}
+
+[project.scripts]
+costledger = "costledger:main"
+
+[tool.setuptools]
+py-modules = ["costledger"]
+package-dir = {"" = "src"}
