@@ -32,6 +32,8 @@ from datetime import datetime, timezone
 from decimal import Decimal, InvalidOperation, ROUND_HALF_UP
 from pathlib import Path
 
+VERSION = "1.0.0"  # tool version (distinct from the ledger format version)
+
 PER_MILLION = Decimal(1_000_000)
 DISPLAY_QUANT = Decimal("0.0001")
 DEFAULT_COMPARE_THRESHOLD_PCT = Decimal("10")
@@ -681,26 +683,39 @@ def load_ledger(path):
 # Commands
 # ---------------------------------------------------------------------------
 
+def _error_exit(message, code):
+    """Caller error (exit 2): print the human-readable line to stderr,
+    then the JSON error envelope (CONVENTIONS.md), then exit 2."""
+    print(f"error: {message}", file=sys.stderr)
+    print(json.dumps({"error": {"code": code, "message": message}}),
+          file=sys.stderr)
+    sys.exit(2)
+
+
 def _load_or_exit(path):
     try:
         return parse_logs(path)
     except FileNotFoundError as e:
-        print(f"error: {e}", file=sys.stderr)
-        sys.exit(2)
+        _error_exit(str(e), "file_not_found")
 
 
 def _pricing_or_exit(path):
     try:
         return get_pricing(path)
     except ValueError as e:
-        print(f"error: {e}", file=sys.stderr)
-        sys.exit(2)
+        _error_exit(str(e), "invalid_pricing")
 
 
 def cmd_tally(args):
     parsed, sources = _load_or_exit(args.path)
     prices = _pricing_or_exit(args.pricing)
     ledger = build_ledger(parsed, sources, prices)
+    # JSON envelope (CONVENTIONS.md): tool version + schema version on
+    # every emitted/saved ledger. (build_ledger's own "version": 1 is
+    # the ledger format version and stays untouched there.)
+    ledger["tool"] = "costledger"
+    ledger["version"] = VERSION
+    ledger["schema_version"] = 1
     if args.save:
         Path(args.save).write_text(json.dumps(ledger, indent=2),
                                    encoding="utf-8")
@@ -722,9 +737,8 @@ def cmd_budget(args):
     try:
         limit = Decimal(str(args.max))
     except InvalidOperation:
-        print(f"error: --max must be a number, got {args.max!r}",
-              file=sys.stderr)
-        sys.exit(2)
+        _error_exit(f"--max must be a number, got {args.max!r}",
+                    "invalid_number")
     print_warnings(prices)
     unknown = unknown_models(parsed.events, prices)
     if total.known_cost > limit:
@@ -749,13 +763,22 @@ def cmd_compare(args):
         new = load_ledger(args.new)
         threshold = Decimal(str(args.threshold_pct))
     except (ValueError, InvalidOperation) as e:
-        print(f"error: {e}", file=sys.stderr)
-        sys.exit(2)
+        msg = str(e)
+        if msg.startswith("ledger not found"):
+            code = "file_not_found"
+        elif "invalid JSON" in msg:
+            code = "invalid_json"
+        else:
+            code = "invalid_input"
+        _error_exit(msg, code)
     try:
         result, regressed = compare_ledgers(base, new, threshold)
     except ValueError as e:
-        print(f"error: {e}", file=sys.stderr)
-        sys.exit(2)
+        _error_exit(str(e), "invalid_input")
+    # JSON envelope (CONVENTIONS.md).
+    result["tool"] = "costledger"
+    result["version"] = VERSION
+    result["schema_version"] = 1
     if args.format == "json":
         print(json.dumps(result, indent=2))
     else:
@@ -849,6 +872,11 @@ def main():
         description="Offline cost accounting for AI agent runs. "
                     "Know what every agent run costs — before the "
                     "invoice does.")
+    ap.add_argument("--version", action="version",
+                    version=f"costledger {VERSION}")
+    ap.add_argument("--no-color", action="store_true",
+                    help="disable ANSI color output (this tool emits "
+                         "no color; accepted for family consistency)")
     sub = ap.add_subparsers(dest="cmd", required=True)
 
     t = sub.add_parser("tally", help="tally token usage + cost from run logs")
