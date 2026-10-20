@@ -1,0 +1,10 @@
+# CostLedger pricing — USD per 1M tokens. Keep as_of current.
+as_of: 2026-10-20
+currency: USD
+models:
+  gpt-5:
+    input: 1.25
+    output: 10.00
+  claude-sonnet-4.5:
+    input: 3.00
+    output: 15.00
