@@ -699,6 +699,16 @@ def _load_or_exit(path):
         _error_exit(str(e), "file_not_found")
 
 
+def _load_logs_arg(path):
+    """(parsed, sources) for a log path — or for stdin when the path
+    is '-' (pipe composability, CONVENTIONS.md): one JSON/JSONL log
+    stream, labelled <stdin>."""
+    if path == "-":
+        parsed = parse_log_text(sys.stdin.read(), "<stdin>", "<stdin>")
+        return parsed, ["<stdin>"]
+    return _load_or_exit(path)
+
+
 def _pricing_or_exit(path):
     try:
         return get_pricing(path)
@@ -707,7 +717,7 @@ def _pricing_or_exit(path):
 
 
 def cmd_tally(args):
-    parsed, sources = _load_or_exit(args.path)
+    parsed, sources = _load_logs_arg(args.path)
     prices = _pricing_or_exit(args.pricing)
     ledger = build_ledger(parsed, sources, prices)
     # JSON envelope (CONVENTIONS.md): tool version + schema version on
@@ -730,7 +740,7 @@ def cmd_tally(args):
 
 
 def cmd_budget(args):
-    parsed, sources = _load_or_exit(args.path)
+    parsed, sources = _load_logs_arg(args.path)
     prices = _pricing_or_exit(args.pricing)
     roll = rollup(parsed.events, prices)
     total = roll["total"]
@@ -880,7 +890,8 @@ def main():
     sub = ap.add_subparsers(dest="cmd", required=True)
 
     t = sub.add_parser("tally", help="tally token usage + cost from run logs")
-    t.add_argument("path", help="log file or directory of logs")
+    t.add_argument("path", help="log file or directory of logs "
+                                "('-' reads one log stream from stdin)")
     t.add_argument("--pricing", help="pricing.yaml / pricing.json "
                                      "(default: built-in table)")
     t.add_argument("--format", choices=("text", "json"), default="text")
@@ -889,7 +900,8 @@ def main():
     t.set_defaults(fn=cmd_tally)
 
     b = sub.add_parser("budget", help="fail (exit 1) when cost exceeds a budget")
-    b.add_argument("path", help="log file or directory of logs")
+    b.add_argument("path", help="log file or directory of logs "
+                                "('-' reads one log stream from stdin)")
     b.add_argument("--max", required=True, metavar="USD",
                    help="budget ceiling in USD, e.g. --max 5.00")
     b.add_argument("--pricing", help="pricing.yaml / pricing.json")
